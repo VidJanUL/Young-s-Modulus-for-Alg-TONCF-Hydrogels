@@ -1,5 +1,3 @@
-# Young-s-Modulus-for-Alg-TONCF-Hydrogels
-
 # Young's modulus model for alginate–TONCF composite hydrogels
 
 Reference implementation for the paper *"A mathematical model for the Young's
