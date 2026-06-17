@@ -40,7 +40,6 @@ figures to `figures/`.
 | `model.py` | Model definition, calibration, prediction and figures |
 | `data.csv` | Experimental moduli (one row per measured point) |
 | `figures/` | Output figures (created on run) |
-| `requirements.txt` | Python dependencies |
 
 ## Data format
 
@@ -58,11 +57,5 @@ To use your own data, keep the same columns. The reference set used for
 calibration is selected by the `REF_CALG` and `REF_CTONCF` constants at the top
 of `model.py`.
 
-## Running
-
-```bash
-pip install -r requirements.txt
-python model.py
-```
 
 Tested with Python 3.10+.
