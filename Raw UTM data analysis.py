@@ -9,8 +9,8 @@ sheet = "Name of the Sheet"   # name of the sheet, or its index (0 = first sheet
 data = pd.read_excel(path, sheet_name=sheet)
 
 length = 0.030       # this dimension is fixed [m]
-thickness = 0.00561  # 0,00578 for "5%Alg 0,25f n=1", 0,00611 for "7,5%Alg 0,5f n=1", 0,00561" for "10%Alg 0,75f n=1"
-width = 0.00274      # 0,00284 for "5%Alg 0,25f n=1", 0,00305 for "7,5%Alg 0,5f n=1", 0,00274" for "10%Alg 0,75f n=1"
+thickness = 0.00111  # 0,00578 for "5%Alg 0,25f n=1", 0,00611 for "7,5%Alg 0,5f n=1", 0,00561" for "10%Alg 0,75f n=1"
+width = 0.00111    # 0,00284 for "5%Alg 0,25f n=1", 0,00305 for "7,5%Alg 0,5f n=1", 0,00274" for "10%Alg 0,75f n=1"
 
 cross_sectional_area = thickness * width
 
