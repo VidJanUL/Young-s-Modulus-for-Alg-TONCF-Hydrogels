@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
 HERE = Path(__file__).resolve().parent
-DATA_FILE = r"C:\Users\VidergarJa\Documents\Raziskovalno delo - nanoceluloza\Comment Response\Data.xlsx"
+DATA_FILE = None
 MAIN_SHEET = "5-10% Alg"
 CA_SHEET = "TONCF_Ca2+ Variations"
 OUT = HERE / "statistics_results"
@@ -43,6 +43,9 @@ def _find_sheet(names, wanted):
     for n in names:
         if _norm(n) == _norm(wanted):
             return n
+    for n in names:
+        if _norm(n).endswith(_norm(wanted)):
+            return n
     return None
 
 
@@ -65,7 +68,7 @@ def find_data_file(path=None):
             pass
     if not found:
         raise FileNotFoundError(f'No Excel workbook with the sheet "{MAIN_SHEET}" in {HERE}. '
-                                f"Set DATA_FILE at the top of statistics.py or give the path on the command line.")
+                                f"Set DATA_FILE at the top of Statistical_Analysis.py or give the path on the command line.")
     return found[0]
 
 
