@@ -151,17 +151,6 @@ of the paper:
 | 10 | Model and measurements for the five alginate series |
 | 11 | Prediction for the 4 % TONCF stock |
 
-## Version history
-
-- **Revised version (2026).** `data.csv`, which contained formulation means, was replaced by
-  `Data.xlsx` with the modulus of every individual specimen; the means in `data.csv` did not
-  exactly match the individual measurements, and all means and standard deviations are now
-  calculated from the individual values. The model was revised (baseline y0 in the model equation,
-  E = 3G with the network factors ψ and ψ_A, Pc1 from excluded-volume theory, calibration on the
-  5, 7.5 and 10 % series), and the statistical analysis and the processing of the raw tensile data
-  were added.
-- **First version (June 2026).** Model and formulation means accompanying the submitted manuscript.
-
 ## Licence
 
 MIT licence; see `LICENSE`.
