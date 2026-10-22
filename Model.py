@@ -9,10 +9,9 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
 HERE = Path(__file__).resolve().parent
-DATA_FILE = r"C:\Users\VidergarJa\Documents\Raziskovalno delo - nanoceluloza\Comment Response\Comment 1 _ New Data.xlsx"
+DATA_FILE = None
 MAIN_SHEET = "5-10% Alg"
-CA_SHEET = "Ca2+ Variations"
-FIG_DIR = HERE / "figures"
+CA_SHEET = "TONCF_Ca2+ Variations"
 
 REF_CALG = 7.5        # alginate stock concentration of the reference series (% w/v)
 REF_CTONCF = 3.0      # TONCF stock concentration of the alginate series (% w/v)
@@ -62,6 +61,9 @@ def _norm(name):
 def _find_sheet(names, wanted):
     for n in names:
         if _norm(n) == _norm(wanted):
+            return n
+    for n in names:
+        if _norm(n).endswith(_norm(wanted)):
             return n
     return None
 
@@ -314,6 +316,19 @@ def calibrate(summary, train=TRAIN, n_iter=30, refit_exponents=True):
     return q
 
 
+def series_amplitudes(summary):
+    out = []
+    for calg, ctoncf, s in model_series(summary):
+        if not np.isclose(ctoncf, REF_CTONCF):
+            continue
+        x, y = SCALE * s.f.values, s.E_kPa.values
+        y0 = float(s[np.isclose(s.f, 0.0)].E_kPa.iloc[0])
+        fit = least_squares(lambda p: y0 + backbone(x, p[0], A2_RATIO * p[0]) - p[1] * agg(x) - y, [300.0, 150.0])
+        cov = np.linalg.pinv(fit.jac.T @ fit.jac) * (2 * fit.cost / (len(fit.fun) - 2))
+        out.append((calg, float(fit.x[0]), float(np.sqrt(cov[0, 0]))))
+    return out
+
+
 def goodness_of_fit(s, calg, ctoncf, q):
     pred = predict(s.f.values, calg, ctoncf, q)
     meas = s.E_kPa.values
@@ -336,7 +351,6 @@ STYLE = {
     "grid.alpha": 0.6,
     "grid.linewidth": 0.8,
 }
-DPI = 300
 
 
 def _style_axes(ax):
@@ -358,12 +372,9 @@ def _legend_below(fig, ax, ncol=2, fontsize=11, height=0.8):
     return (0, height / (h + height), 1, 1)
 
 
-def _save(fig, name, rect=None):
+def _finish(fig, name, rect=None):
     fig.tight_layout(rect=rect)
-    if SAVE_FIGURES:
-        FIG_DIR.mkdir(exist_ok=True)
-        fig.savefig(FIG_DIR / name, dpi=DPI)      # fixed size (no tight crop): same pixel dimensions on every machine
-    if not SHOW.get(Path(name).stem, False):
+    if not SHOW.get(name, False):
         plt.close(fig)
 
 
@@ -380,7 +391,7 @@ def fig1_reference(summary):
     ax.set_xlabel("TONCF mixing fraction $f$")
     ax.set_ylabel("Young's modulus $E$ [kPa]")
     ax.set_ylim(bottom=0)
-    _save(fig, "Fig1_reference_series.png")
+    _finish(fig, "Fig1_reference_series")
 
 
 def fig2_calcium(summary):
@@ -397,7 +408,7 @@ def fig2_calcium(summary):
     ax.set_ylabel("Young's modulus [kPa]")
     ax.set_ylim(0, None)
     ax.legend()
-    _save(fig, "Fig2a_calcium_series.png")
+    _finish(fig, "Fig2a_calcium_series")
 
     s = summary[np.isclose(summary.Calg, 5.0) & np.isclose(summary.Ctoncf, 3.0) & np.isclose(summary.f, 0.5)]
     s = s.sort_values("Ca")
@@ -411,7 +422,7 @@ def fig2_calcium(summary):
     ax.set_xlabel("Ca$^{2+}$ concentration [% w/v]")
     ax.set_ylabel("Young's modulus [kPa]")
     ax.set_ylim(0, s.E_kPa.max() * 1.3)
-    _save(fig, "Fig2b_calcium_step.png")
+    _finish(fig, "Fig2b_calcium_step")
 
 
 def fig3_stock(summary):
@@ -427,7 +438,7 @@ def fig3_stock(summary):
     ax.set_ylabel("Young's modulus [kPa]")
     ax.set_ylim(0, None)
     ax.legend(loc="upper center")
-    _save(fig, "Fig3_TONCF_stock.png")
+    _finish(fig, "Fig3_TONCF_stock")
 
 
 def fig4_disruption():
@@ -446,7 +457,7 @@ def fig4_disruption():
     ax.set_xlabel("TONCF stock concentration [% w/v]")
     ax.set_ylabel("disruption factor")
     ax.legend()
-    _save(fig, "Fig4_disruption_factor.png")
+    _finish(fig, "Fig4_disruption_factor")
 
 
 def fig5_curves(q):
@@ -464,7 +475,7 @@ def fig5_curves(q):
         ax.plot(F_PLOT, model(SCALE * F_PLOT, A1, A2, B, baseline(calg)), ls, lw=lw, color=col, label=lab)
     ax.set_xlabel("TONCF mixing fraction $f$")
     ax.set_ylabel("E [kPa]")
-    _save(fig, "Fig5_predicted_curves.png", rect=_legend_below(fig, ax))
+    _finish(fig, "Fig5_predicted_curves", rect=_legend_below(fig, ax))
 
 
 def fig6_amplitudes(q):
@@ -481,7 +492,7 @@ def fig6_amplitudes(q):
     ax.set_xlabel("Alginate stock concentration [% w/v]")
     ax.set_ylabel("Parameter value [kPa]")
     ax.legend()
-    _save(fig, "Fig6_amplitudes.png")
+    _finish(fig, "Fig6_amplitudes")
 
 
 def fig7_dip_amplitudes(summary, q):
@@ -492,14 +503,13 @@ def fig7_dip_amplitudes(summary, q):
     fig, ax = _new()
     ax.plot(c, np.maximum(bbar - B2 * (c - cbar), 0.0), "k-", lw=2, label="slope $-b_2$ (theory)")
     for i, (calg, B) in enumerate(pts):
-        tag = "training" if calg in FIT["train"] else "held out"
-        ax.scatter([calg], [B], s=110, color=COLORS[i], zorder=5, label=f"{calg:g}% alg ({tag})")
+        ax.scatter([calg], [B], s=110, color=COLORS[i], zorder=5, label=f"{calg:g} % alg")
     ax.axvline(C_SAT, color="red", ls="--", lw=1.5, label=f"C_sat={C_SAT:.1f}% (computed)")
     ax.axhline(0, color="gray", ls=":", lw=1)
     ax.set_xlabel("Alginate stock concentration [% w/v]")
     ax.set_ylabel("B [kPa]")
     ax.legend(fontsize=11)
-    _save(fig, "Fig7_dip_amplitude.png")
+    _finish(fig, "Fig7_dip_amplitude")
 
 
 def fig8_peak_positions(q):
@@ -527,25 +537,57 @@ def fig8_peak_positions(q):
     ax2.axhline(0, color="gray", ls="--", lw=0.8)
     ax2.set_xlabel("Alginate stock concentration [% w/v]")
     ax2.set_ylabel("error")
-    _save(fig, "Fig8_peak_positions.png")
+    _finish(fig, "Fig8_peak_positions")
 
 
-def fig9_validation(summary, q):
+def fig9_calibration(summary, q):
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 7.4))
+    for ax in (ax1, ax2):
+        _style_axes(ax)
+    c = np.linspace(0, 11, 100)
+    ax1.plot(c, 3 * PHI * B1 * (c + q * ALPHA * REF_CTONCF), "k-", lw=2, label="$A_1$, Eq. (9)")
+    amps = series_amplitudes(summary)
+    ax1.errorbar([a[0] for a in amps], [a[1] for a in amps], yerr=[a[2] for a in amps], marker="o", ms=9,
+                 color="#1f77b4", ls="none", label="$A_1$ fitted to each series", **EB)
+    ax1.text(0.97, 0.06, f"slope $3\\varphi b_1$  $\\rightarrow$  $\\varphi$ = {PHI:.3f}\n"
+                         f"intercept $3\\varphi b_1 q\\,\\alpha\\,C_{{TONCF}}$  $\\rightarrow$  $q$ = {q:.2f}",
+             transform=ax1.transAxes, ha="right", va="bottom", fontsize=12,
+             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray"))
+    ax1.set_xlim(0, 11)
+    ax1.set_ylim(0, None)
+    ax1.set_ylabel("$A_1$ [kPa]")
+    ax1.legend(loc="upper left", fontsize=11)
+    ax1.set_title("(a)", loc="left", fontsize=15)
+
+    ax2.plot(c, 3 * PHI_A * B1 * c, "k-", lw=2, label="$y_0 = 3\\varphi_A b_1 C_{Alg}$")
+    f0 = [(calg, s[np.isclose(s.f, 0.0)]) for calg, ctoncf, s in model_series(summary) if np.isclose(ctoncf, REF_CTONCF)]
+    f0 = [(calg, s0) for calg, s0 in f0 if not s0.empty]
+    ax2.errorbar([v[0] for v in f0], [v[1].E_kPa.iloc[0] for v in f0], yerr=[v[1].SD_kPa.iloc[0] for v in f0],
+                 marker="s", ms=9, color="#2d9e5a", ls="none", label="measured, $f$ = 0", **EB)
+    ax2.text(0.97, 0.06, f"$\\varphi_A$ = {PHI_A:.3f}", transform=ax2.transAxes, ha="right", va="bottom", fontsize=12,
+             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray"))
+    ax2.set_xlim(0, 11)
+    ax2.set_ylim(0, None)
+    ax2.set_xlabel("Alginate stock concentration [% w/v]")
+    ax2.set_ylabel("$E$ at $f$ = 0 [kPa]")
+    ax2.legend(loc="upper left", fontsize=11)
+    ax2.set_title("(b)", loc="left", fontsize=15)
+    _finish(fig, "Fig9_calibration")
+
+
+def fig10_validation(summary, q):
     fig, ax = _new()
     alg_series = [m for m in model_series(summary) if np.isclose(m[1], REF_CTONCF)]
     for i, (calg, ctoncf, s) in enumerate(alg_series):
-        train = calg in FIT["train"]
         ax.errorbar(s.f, s.E_kPa, yerr=s.SD_kPa, color=COLORS[i], marker="o", ms=5, ls="none", **EB)
-        ax.plot(F_PLOT, predict(F_PLOT, calg, ctoncf, q), color=COLORS[i], lw=2.6 if train else 1.6,
-                ls="-" if train else "--",
-                label=f"{calg:g} % alg. stock ({'training' if train else 'held out'})")
+        ax.plot(F_PLOT, predict(F_PLOT, calg, ctoncf, q), color=COLORS[i], lw=2.2, label=f"{calg:g} % alg. stock")
     ax.set_xlabel("TONCF mixing fraction $f$")
     ax.set_ylabel("E [kPa]")
     ax.set_ylim(bottom=-5)
-    _save(fig, "Fig9_model_validation.png", rect=_legend_below(fig, ax))
+    _finish(fig, "Fig10_model_validation", rect=_legend_below(fig, ax, ncol=3))
 
 
-def fig10_stock_prediction(summary, q):
+def fig11_stock_prediction(summary, q):
     stock = [m for m in model_series(summary) if m[1] > REF_CTONCF]
     if not stock:
         return
@@ -558,7 +600,7 @@ def fig10_stock_prediction(summary, q):
     ax.set_xlabel("TONCF mixing fraction $f$")
     ax.set_ylabel("E [kPa]")
     ax.legend(loc="upper left")
-    _save(fig, "Fig10_stock_prediction.png")
+    _finish(fig, "Fig11_stock_prediction")
 
 def main(path=None):
     specimens = load_measurements(path)
@@ -591,7 +633,7 @@ def main(path=None):
     print("\nGoodness of fit (formulation means)")
     for calg, ctoncf, s in model_series(summary):
         r2, rmse = goodness_of_fit(s, calg, ctoncf, q)
-        role = "training" if (calg in FIT["train"] and np.isclose(ctoncf, REF_CTONCF)) else "held out"
+        role = "training" if (calg in FIT["train"] and np.isclose(ctoncf, REF_CTONCF)) else "withheld"
         print(f"    {calg:>5g} % alginate, {ctoncf:g} % TONCF stock ({role:8s}):  R2 = {r2:.3f}   RMSE = {rmse:5.1f} kPa")
 
     A1, A2, B = amplitudes(REF_CALG, REF_CTONCF, q)
@@ -600,8 +642,6 @@ def main(path=None):
           f"   X_NUM = {xn / SCALE:.4f}  (TONCF fraction)")
 
     article_figures(summary, q)
-    if SAVE_FIGURES:
-        print(f"\nFigures 1-10 of the paper written to {FIG_DIR.name}/")
 
 
 def article_figures(summary, q):
@@ -616,13 +656,13 @@ def article_figures(summary, q):
         fig6_amplitudes(q)
         fig7_dip_amplitudes(summary, q)
         fig8_peak_positions(q)
-        fig9_validation(summary, q)
-        fig10_stock_prediction(summary, q)
+        fig9_calibration(summary, q)
+        fig10_validation(summary, q)
+        fig11_stock_prediction(summary, q)
         if plt.get_fignums():
             plt.show()
 
 
-SAVE_FIGURES = False      # True: also write the figures to figures/ (300 dpi, as in the paper)
 SHOW = {
     "Fig1_reference_series": True,
     "Fig2a_calcium_series": True,
@@ -633,8 +673,9 @@ SHOW = {
     "Fig6_amplitudes": True,
     "Fig7_dip_amplitude": True,
     "Fig8_peak_positions": True,
-    "Fig9_model_validation": True,
-    "Fig10_stock_prediction": True,
+    "Fig9_calibration": True,
+    "Fig10_model_validation": True,
+    "Fig11_stock_prediction": True,
 }
 
 if __name__ == "__main__":
