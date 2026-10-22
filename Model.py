@@ -50,7 +50,7 @@ OMEGA = ((XV2 - XV1) / 10) ** 0.5         # Eq. (18)
 SIG_WIDTH = 0.08                          # Eq. (19)
 
 # set by calibrate()
-PHI = PHI_A = None
+PSI = PSI_A = None
 C_SAT = 20.0          # iteration seed only
 FIT = {}
 
@@ -215,11 +215,11 @@ def csat(ctoncf):                                    # Eq. (22), expressed throu
 
 
 def baseline(calg):
-    return 3.0 * PHI_A * B1 * calg
+    return 3.0 * PSI_A * B1 * calg
 
-def amplitudes(calg, ctoncf, q, phi=None):
-    phi = PHI if phi is None else phi
-    A1 = 3.0 * phi * B1 * (calg + q * ALPHA * ctoncf) * disruption(ctoncf)    # Eq. (9)
+def amplitudes(calg, ctoncf, q, psi=None):
+    psi = PSI if psi is None else psi
+    A1 = 3.0 * psi * B1 * (calg + q * ALPHA * ctoncf) * disruption(ctoncf)    # Eq. (9)
     A2 = A2_RATIO * A1                                                     # Eq. (12)
     B = max(B2 * (csat(ctoncf) - calg), 0.0)                               # Eq. (20)
     return A1, A2, B
@@ -230,8 +230,8 @@ def model(x, A1, A2, B, y0=0.0):                     # Eq. (3)
     return y0 + backbone(x, A1, A2) - B * agg(x)
 
 
-def predict(f, calg, ctoncf, q, phi=None):
-    return model(SCALE * np.asarray(f, dtype=float), *amplitudes(calg, ctoncf, q, phi), y0=baseline(calg))
+def predict(f, calg, ctoncf, q, psi=None):
+    return model(SCALE * np.asarray(f, dtype=float), *amplitudes(calg, ctoncf, q, psi), y0=baseline(calg))
 
 X_GRID = np.linspace(0.0, 2.8, 8000)
 
@@ -270,24 +270,24 @@ def fit_exponents(summary, calg=REF_CALG):
     return T1, T2
 
 
-def dip_amplitudes(summary, q, phi=None, which=None):
+def dip_amplitudes(summary, q, psi=None, which=None):
     h = float(agg(np.array([MU]))[0])
     out = []
     for calg, ctoncf, s in model_series(summary):
         if not np.isclose(ctoncf, REF_CTONCF) or (which is not None and calg not in which):
             continue
-        A1, A2, _ = amplitudes(calg, ctoncf, q, phi)
+        A1, A2, _ = amplitudes(calg, ctoncf, q, psi)
         backbone_mu = baseline(calg) + float(backbone(np.array([MU]), A1, A2)[0])
         E_mu = np.interp(MU, SCALE * s.f.values, s.E_kPa.values)
         out.append((calg, (backbone_mu - E_mu) / h))
     return out
 
 
-def _fit_phi_q(summary, train):
+def _fit_psi_q(summary, train):
     data = [(calg, series(summary, calg, REF_CTONCF)) for calg in train]
 
     def residuals(p):
-        return np.concatenate([predict(s.f.values, calg, REF_CTONCF, p[1], phi=p[0]) - s.E_kPa.values
+        return np.concatenate([predict(s.f.values, calg, REF_CTONCF, p[1], psi=p[0]) - s.E_kPa.values
                                for calg, s in data])
 
     fits = [least_squares(residuals, [p0, q0], bounds=([0.01, 0.0], [3.0, 30.0]))
@@ -295,14 +295,14 @@ def _fit_phi_q(summary, train):
     return min(fits, key=lambda r: r.cost)
 
 def calibrate(summary, train=TRAIN, n_iter=30, refit_exponents=True):
-    global PHI, PHI_A, C_SAT
+    global PSI, PSI_A, C_SAT
     if refit_exponents:
         fit_exponents(summary)
-    PHI_A = float(np.mean([series(summary, c, REF_CTONCF).query("f == 0").E_kPa.iloc[0] / (3 * B1 * c)
+    PSI_A = float(np.mean([series(summary, c, REF_CTONCF).query("f == 0").E_kPa.iloc[0] / (3 * B1 * c)
                            for c in train]))
     for _ in range(n_iter):
-        best = _fit_phi_q(summary, train)
-        PHI, q = float(best.x[0]), float(best.x[1])
+        best = _fit_psi_q(summary, train)
+        PSI, q = float(best.x[0]), float(best.x[1])
         new = float(np.mean([calg + B / B2 for calg, B in dip_amplitudes(summary, q, which=train)]))
         done = abs(new - C_SAT) < 1e-6
         C_SAT = new
@@ -310,8 +310,8 @@ def calibrate(summary, train=TRAIN, n_iter=30, refit_exponents=True):
             break
     cov = np.linalg.pinv(best.jac.T @ best.jac) * (2 * best.cost / (len(best.fun) - 2))
     se = np.sqrt(np.diag(cov))
-    FIT.update(phi=PHI, q=q, phi_se=float(se[0]), q_se=float(se[1]),
-               corr=float(cov[0, 1] / (se[0] * se[1])), phi_A=PHI_A, C_sat=C_SAT, train=list(train),
+    FIT.update(psi=PSI, q=q, psi_se=float(se[0]), q_se=float(se[1]),
+               corr=float(cov[0, 1] / (se[0] * se[1])), psi_A=PSI_A, C_sat=C_SAT, train=list(train),
                t1=T1, t2=T2, Pc1=float(PC1))
     return q
 
@@ -545,12 +545,12 @@ def fig9_calibration(summary, q):
     for ax in (ax1, ax2):
         _style_axes(ax)
     c = np.linspace(0, 11, 100)
-    ax1.plot(c, 3 * PHI * B1 * (c + q * ALPHA * REF_CTONCF), "k-", lw=2, label="$A_1$, Eq. (9)")
+    ax1.plot(c, 3 * PSI * B1 * (c + q * ALPHA * REF_CTONCF), "k-", lw=2, label="$A_1$, Eq. (9)")
     amps = series_amplitudes(summary)
     ax1.errorbar([a[0] for a in amps], [a[1] for a in amps], yerr=[a[2] for a in amps], marker="o", ms=9,
                  color="#1f77b4", ls="none", label="$A_1$ fitted to each series", **EB)
-    ax1.text(0.97, 0.06, f"slope $3\\varphi b_1$  $\\rightarrow$  $\\varphi$ = {PHI:.3f}\n"
-                         f"intercept $3\\varphi b_1 q\\,\\alpha\\,C_{{TONCF}}$  $\\rightarrow$  $q$ = {q:.2f}",
+    ax1.text(0.97, 0.06, f"slope $3\\psi b_1$  $\\rightarrow$  $\\psi$ = {PSI:.3f}\n"
+                         f"intercept $3\\psi b_1 q\\,\\alpha\\,C_{{TONCF}}$  $\\rightarrow$  $q$ = {q:.2f}",
              transform=ax1.transAxes, ha="right", va="bottom", fontsize=12,
              bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray"))
     ax1.set_xlim(0, 11)
@@ -559,12 +559,12 @@ def fig9_calibration(summary, q):
     ax1.legend(loc="upper left", fontsize=11)
     ax1.set_title("(a)", loc="left", fontsize=15)
 
-    ax2.plot(c, 3 * PHI_A * B1 * c, "k-", lw=2, label="$y_0 = 3\\varphi_A b_1 C_{Alg}$")
+    ax2.plot(c, 3 * PSI_A * B1 * c, "k-", lw=2, label="$y_0 = 3\\psi_A b_1 C_{Alg}$")
     f0 = [(calg, s[np.isclose(s.f, 0.0)]) for calg, ctoncf, s in model_series(summary) if np.isclose(ctoncf, REF_CTONCF)]
     f0 = [(calg, s0) for calg, s0 in f0 if not s0.empty]
     ax2.errorbar([v[0] for v in f0], [v[1].E_kPa.iloc[0] for v in f0], yerr=[v[1].SD_kPa.iloc[0] for v in f0],
                  marker="s", ms=9, color="#2d9e5a", ls="none", label="measured, $f$ = 0", **EB)
-    ax2.text(0.97, 0.06, f"$\\varphi_A$ = {PHI_A:.3f}", transform=ax2.transAxes, ha="right", va="bottom", fontsize=12,
+    ax2.text(0.97, 0.06, f"$\\psi_A$ = {PSI_A:.3f}", transform=ax2.transAxes, ha="right", va="bottom", fontsize=12,
              bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray"))
     ax2.set_xlim(0, 11)
     ax2.set_ylim(0, None)
@@ -618,12 +618,12 @@ def main(path=None):
     print(f"    Pc2 = {PC2}   mu = {MU}   omega = {OMEGA:.4f}")
     print(f"    t1 = {T1:.3f}   t2 = {T2:.3f}   (shape of the {REF_CALG:g} % reference curve, Pc1 and Pc2 fixed)")
     print(f"Determined from the training series {FIT['train']}")
-    print(f"    phi   = {FIT['phi']:.3f} +/- {FIT['phi_se']:.3f}   (fitted)")
-    print(f"    q     = {FIT['q']:.2f} +/- {FIT['q_se']:.2f}    (fitted)   correlation(phi, q) = {FIT['corr']:.2f}")
-    print(f"    phi_A = {PHI_A:.4f}   (fibre-free gels)        ratio phi/phi_A = {PHI / PHI_A:.1f}")
+    print(f"    psi   = {FIT['psi']:.3f} +/- {FIT['psi_se']:.3f}   (fitted)")
+    print(f"    q     = {FIT['q']:.2f} +/- {FIT['q_se']:.2f}    (fitted)   correlation(psi, q) = {FIT['corr']:.2f}")
+    print(f"    psi_A = {PSI_A:.4f}   (fibre-free gels)        ratio psi/psi_A = {PSI / PSI_A:.1f}")
     print(f"    C_sat = {C_SAT:.2f} %   (dip amplitudes)        gamma = {gamma:.2f}")
 
-    print("\nFibre-free gels: measured vs y0 = 3 phi_A b1 C_Alg")
+    print("\nFibre-free gels: measured vs y0 = 3 psi_A b1 C_Alg")
     for calg, ctoncf, s in model_series(summary):
         s0 = s[np.isclose(s.f, 0.0)]
         if not s0.empty:
