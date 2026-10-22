@@ -1,8 +1,7 @@
 # Young's modulus of alginate–TONCF composite hydrogels: data and model
 
 Data and code for the paper *"Origin and prediction of the M-shaped Young's modulus response of
-alginate hydrogels reinforced with TEMPO-oxidised cellulose nanofibres"* (citation and DOI will be
-added on publication).
+alginate hydrogels reinforced with TEMPO-oxidised cellulose nanofibres".
 
 The repository contains the Young's modulus of every tested specimen, raw force–displacement data
 with the script that converts them into Young's moduli, the statistical analysis of the M-shaped
