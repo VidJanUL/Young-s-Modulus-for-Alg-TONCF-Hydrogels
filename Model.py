@@ -618,8 +618,8 @@ def main(path=None):
     print(f"    Pc2 = {PC2}   mu = {MU}   omega = {OMEGA:.4f}")
     print(f"    t1 = {T1:.3f}   t2 = {T2:.3f}   (shape of the {REF_CALG:g} % reference curve, Pc1 and Pc2 fixed)")
     print(f"Determined from the training series {FIT['train']}")
-    print(f"    psi   = {FIT['psi']:.3f} +/- {FIT['psi_se']:.3f}   (fitted)")
-    print(f"    q     = {FIT['q']:.2f} +/- {FIT['q_se']:.2f}    (fitted)   correlation(psi, q) = {FIT['corr']:.2f}")
+    print(f"    psi   = {FIT['psi']:.3f}   (fitted)")
+    print(f"    q     = {FIT['q']:.2f}    (fitted)")
     print(f"    psi_A = {PSI_A:.4f}   (fibre-free gels)        ratio psi/psi_A = {PSI / PSI_A:.1f}")
     print(f"    C_sat = {C_SAT:.2f} %   (dip amplitudes)        gamma = {gamma:.2f}")
 
