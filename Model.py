@@ -15,8 +15,9 @@ CA_SHEET = "TONCF_Ca2+ Variations"
 
 REF_CALG = 7.5        # alginate stock concentration of the reference series (% w/v)
 REF_CTONCF = 3.0      # TONCF stock concentration of the alginate series (% w/v)
-SCALE = 3.0           # x = SCALE * f, dimensionless; equals the final TONCF concentration (% w/v) for the 3 % stock
-CA = 2.0              # crosslinker concentration of the modelled series (%)
+SCALE = 3.0           # x = SCALE * f: scaled mixing fraction, the same for all TONCF stocks; equals the final TONCF
+                      # concentration (% w/v) for the 3 % stock
+CA = 2.0              # CaCl2 concentration of the cross-linking bath for the modelled series (% w/v, anhydrous CaCl2)
 C_REF = 3.0           # reference TONCF stock concentration (% w/v)
 TRAIN = [5.0, 7.5, 10.0]          # predefined training series (alginate stock, % w/v)
 
@@ -402,7 +403,7 @@ def fig2_calcium(summary):
             continue
         _quadratic_guide(ax, s, col)
         ax.errorbar(s.f, s.E_kPa, yerr=s.SD_kPa, color=col, marker="o", ms=8, ls="none", **EB,
-                    label=f"5 % alg / {ctoncf:g} % TONCF / {ca:g} % Ca$^{{2+}}$")
+                    label=f"5 % alg / {ctoncf:g} % TONCF / {ca:g} % CaCl$_2$")
     ax.set_xticks([0.25, 0.5, 0.75])
     ax.set_xlabel("TONCF mixing fraction $f$")
     ax.set_ylabel("Young's modulus [kPa]")
@@ -419,7 +420,7 @@ def fig2_calcium(summary):
     ax.annotate("step\nincrease", xy=(xa, ya), xytext=(xa - 0.3, ya + 15), ha="center",
                 arrowprops=dict(arrowstyle="->", color="0.3"))
     ax.set_xticks(s.Ca.values)
-    ax.set_xlabel("Ca$^{2+}$ concentration [% w/v]")
+    ax.set_xlabel("CaCl$_2$ concentration [% w/v]")
     ax.set_ylabel("Young's modulus [kPa]")
     ax.set_ylim(0, s.E_kPa.max() * 1.3)
     _finish(fig, "Fig2b_calcium_step")
@@ -612,9 +613,10 @@ def main(path=None):
 
     print("Fixed from the ionic-crosslinking framework")
     print(f"    aff = {AFF:.4f}   b1 = {B1:.3f} kPa/%   b2 = {B2:.3f} kPa/%   beta = {BETA:.4f} %^-1")
-    print("Fixed from the geometry of the reference curve")
+    print("Fixed from excluded-volume theory")
     print(f"    Pc1 = 100 rho V_fib/V_ex = {PC1:.4f}   (V_fib/V_ex = {PHI_C:.4e}; R = {R_FIB:g} nm, L = {L_FIB:g} nm, "
           f"rho = {RHO_TONCF:g} g/cm3)")
+    print("Fixed from the geometry of the reference curve")
     print(f"    Pc2 = {PC2}   mu = {MU}   omega = {OMEGA:.4f}")
     print(f"    t1 = {T1:.3f}   t2 = {T2:.3f}   (shape of the {REF_CALG:g} % reference curve, Pc1 and Pc2 fixed)")
     print(f"Determined from the training series {FIT['train']}")
