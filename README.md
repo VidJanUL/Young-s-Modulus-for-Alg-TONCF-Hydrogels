@@ -85,8 +85,7 @@ modulus and plots the three curves with their fitted lines (Fig. 1a of the paper
   as the data points between 40 % and 75 % of the record;
 - tensile strength = maximum stress.
 
-For the three specimens the script reproduces the values in `Data.xlsx` (219 084, 224 284 and
-444 589 Pa).
+For the three representative specimens the script reproduces the values in `Data.xlsx`.
 
 ## Statistical analysis
 
