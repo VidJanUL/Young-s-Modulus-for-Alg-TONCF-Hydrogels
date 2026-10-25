@@ -15,10 +15,8 @@ CA_SHEET = "TONCF_Ca2+ Variations"
 
 REF_CALG = 7.5        # alginate stock concentration of the reference series (% w/v)
 REF_CTONCF = 3.0      # TONCF stock concentration of the alginate series (% w/v)
-SCALE = 3.0           # x = SCALE * f: scaled mixing fraction, the same for all TONCF stocks; equals the final TONCF
-                      # concentration (% w/v) for the 3 % stock
 CA = 2.0              # CaCl2 concentration of the cross-linking bath for the modelled series (% w/v, anhydrous CaCl2)
-C_REF = 3.0           # reference TONCF stock concentration (% w/v)
+C_REF = 3.0           # TONCF stock concentration up to which the fibres contribute independently (% w/v)
 TRAIN = [5.0, 7.5, 10.0]          # predefined training series (alginate stock, % w/v)
 
 R_GAS = 8.314         # J / (mol K)
@@ -42,7 +40,7 @@ V_FIB = np.pi * R_FIB ** 2 * L_FIB + 4.0 / 3.0 * np.pi * R_FIB ** 3             
 V_EX = 32.0 / 3.0 * np.pi * R_FIB ** 3 * (1 + 0.75 * L_FIB / R_FIB + 3.0 / 32.0 * (L_FIB / R_FIB) ** 2)  # Eq. (7)
 RHO_TONCF = 1.5       # TONCF (cellulose) density, g/cm3
 PHI_C = V_FIB / V_EX                  # Eq. (5): critical volume fraction, 1.85e-3
-PC1 = 100.0 * RHO_TONCF * PHI_C       # critical TONCF concentration, % (w/v) = x value for the 3 % stock: 0.28
+PC1 = 100.0 * RHO_TONCF * PHI_C       # critical concentration of dispersed TONCF, % (w/v), on the x axis: 0.28
 PC2 = 1.918           # second threshold (inflection of the falling branch)
 MU = 1.63             # centre of the agglomeration Gaussian
 T1 = T2 = None        # exponents of the rising and falling terms, set by fit_exponents()
@@ -118,8 +116,8 @@ def load_measurements(path=None):
         main_name, ca_name = _find_sheet(xl.sheet_names, MAIN_SHEET), _find_sheet(xl.sheet_names, CA_SHEET)
         if main_name is None:
             raise ValueError(f'Sheet "{MAIN_SHEET}" not found in {path.name} (sheets: {xl.sheet_names})')
-        main = xl.parse(main_name)
-        ca = xl.parse(ca_name) if ca_name else None
+        main = pd.read_excel(xl, sheet_name=main_name)
+        ca = pd.read_excel(xl, sheet_name=ca_name) if ca_name else None
     print(f"Data: {path.name if path.resolve().parent == HERE else path}")
 
     main = main.rename(columns={main.columns[0]: "Calg", main.columns[1]: "f"})
@@ -161,6 +159,14 @@ def model_series(summary):
             for calg in sorted(at_ca[np.isclose(at_ca.Ctoncf, ctoncf)].Calg.unique()):
                 out.append((calg, ctoncf, series(summary, calg, ctoncf)))
     return out
+
+def x_coord(f, ctoncf):                              # Eq. (2): x = f min(C_TONCF, C_ref)
+    return np.asarray(f, dtype=float) * min(ctoncf, C_REF)
+
+
+def f_coord(x, ctoncf):                              # inverse of Eq. (2): mixing fraction f at position x
+    return np.asarray(x, dtype=float) / min(ctoncf, C_REF)
+
 
 def pos_pow(u, p):
     u = np.asarray(u, dtype=float)
@@ -232,7 +238,7 @@ def model(x, A1, A2, B, y0=0.0):                     # Eq. (3)
 
 
 def predict(f, calg, ctoncf, q, psi=None):
-    return model(SCALE * np.asarray(f, dtype=float), *amplitudes(calg, ctoncf, q, psi), y0=baseline(calg))
+    return model(x_coord(f, ctoncf), *amplitudes(calg, ctoncf, q, psi), y0=baseline(calg))
 
 X_GRID = np.linspace(0.0, 2.8, 8000)
 
@@ -257,7 +263,7 @@ def k_coefficient(A1, A2):
 def fit_exponents(summary, calg=REF_CALG):
     global T1, T2
     s = series(summary, calg, REF_CTONCF)
-    x, y = SCALE * s.f.values, s.E_kPa.values
+    x, y = x_coord(s.f.values, REF_CTONCF), s.E_kPa.values
     y0 = float(s[np.isclose(s.f, 0.0)].E_kPa.iloc[0])
 
     def residuals(p):
@@ -279,7 +285,7 @@ def dip_amplitudes(summary, q, psi=None, which=None):
             continue
         A1, A2, _ = amplitudes(calg, ctoncf, q, psi)
         backbone_mu = baseline(calg) + float(backbone(np.array([MU]), A1, A2)[0])
-        E_mu = np.interp(MU, SCALE * s.f.values, s.E_kPa.values)
+        E_mu = np.interp(MU, x_coord(s.f.values, ctoncf), s.E_kPa.values)
         out.append((calg, (backbone_mu - E_mu) / h))
     return out
 
@@ -322,7 +328,7 @@ def series_amplitudes(summary):
     for calg, ctoncf, s in model_series(summary):
         if not np.isclose(ctoncf, REF_CTONCF):
             continue
-        x, y = SCALE * s.f.values, s.E_kPa.values
+        x, y = x_coord(s.f.values, ctoncf), s.E_kPa.values
         y0 = float(s[np.isclose(s.f, 0.0)].E_kPa.iloc[0])
         fit = least_squares(lambda p: y0 + backbone(x, p[0], A2_RATIO * p[0]) - p[1] * agg(x) - y, [300.0, 150.0])
         cov = np.linalg.pinv(fit.jac.T @ fit.jac) * (2 * fit.cost / (len(fit.fun) - 2))
@@ -445,18 +451,19 @@ def fig3_stock(summary):
 def fig4_disruption():
     ct = np.linspace(2.5, 6, 200)
     fig, ax = _new()
-    ax.plot(ct, [disruption(c) for c in ct], "k-", lw=2, label=f"d = exp(-{BETA:.3f}(Ct-{C_REF:g}))")
-    ax.axvline(C_REF, color="gray", ls=":", lw=2, ymax=0.95, label=f"Ct_ref={C_REF:g}%")
+    ax.plot(ct, [disruption(c) for c in ct], "k-", lw=2,
+            label=rf"$d_{{fac}} = \exp[-{BETA:.3f}\,(C_{{TONCF}} - {C_REF:g})]$")
+    ax.axvline(C_REF, color="gray", ls=":", lw=2, ymax=0.95, label=rf"$C_{{ref}}$ = {C_REF:g} %")
     for c, col, (dx, dy) in [(3.0, "#1f77b4", (3.55, 0.30)), (4.0, "#ff7f0e", (5.10, 0.30))]:
         d = disruption(c)
         ax.scatter([c], [d], s=110, color=col, zorder=5)
-        ax.annotate(f"Ct={c:g}%\nd={d:.3f} ({(1 - d) * 100:.1f}% red.)", xy=(c, d), xytext=(dx, dy),
-                    ha="center", va="center", fontsize=12,
+        ax.annotate(rf"$C_{{TONCF}}$ = {c:g} %" + "\n" + rf"$d_{{fac}}$ = {d:.3f} ({(1 - d) * 100:.1f} % red.)",
+                    xy=(c, d), xytext=(dx, dy), ha="center", va="center", fontsize=12,
                     bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray"),
                     arrowprops=dict(arrowstyle="-", color="gray"))
     ax.set_ylim(0, 1.05)
-    ax.set_xlabel("TONCF stock concentration [% w/v]")
-    ax.set_ylabel("disruption factor")
+    ax.set_xlabel("TONCF stock concentration $C_{TONCF}$ [% w/v]")
+    ax.set_ylabel("Disruption factor $d_{fac}$")
     ax.legend()
     _finish(fig, "Fig4_disruption_factor")
 
@@ -468,14 +475,15 @@ def fig5_curves(q):
     for calg, ls, lw, col in levels:
         A1, A2, B = amplitudes(calg, REF_CTONCF, q)
         if np.isclose(calg, C_SAT):
-            lab = f"Calg=csat={calg:.1f}% (transition)"
+            lab = rf"$C_{{Alg}} = C_{{sat}}$ = {calg:.2f} % (transition)"
         elif calg > C_SAT:
-            lab = f"Calg={calg:.1f}% (above csat, B=0)"
+            lab = rf"$C_{{Alg}}$ = {calg:.1f} % (above $C_{{sat}}$, $B$ = 0)"
         else:
-            lab = f"Calg={calg:.1f}% (B={B:.1f})"
-        ax.plot(F_PLOT, model(SCALE * F_PLOT, A1, A2, B, baseline(calg)), ls, lw=lw, color=col, label=lab)
+            lab = rf"$C_{{Alg}}$ = {calg:.1f} % ($B$ = {B:.1f} kPa)"
+        ax.plot(F_PLOT, model(x_coord(F_PLOT, REF_CTONCF), A1, A2, B, baseline(calg)), ls, lw=lw, color=col,
+                label=lab)
     ax.set_xlabel("TONCF mixing fraction $f$")
-    ax.set_ylabel("E [kPa]")
+    ax.set_ylabel("Young's modulus $E$ [kPa]")
     _finish(fig, "Fig5_predicted_curves", rect=_legend_below(fig, ax))
 
 
@@ -488,7 +496,7 @@ def fig6_amplitudes(q):
         A1, _, B = amplitudes(calg, REF_CTONCF, q)
         ax.scatter([calg], [A1], s=110, color=COLORS[i], zorder=5)
         ax.scatter([calg], [B], s=110, color=COLORS[i], marker="D", zorder=5)
-    ax.axvline(C_SAT, color="gray", ls="--", lw=2, label=f"C_sat={C_SAT:.1f}%")
+    ax.axvline(C_SAT, color="gray", ls="--", lw=2, label=rf"$C_{{sat}}$ = {C_SAT:.2f} %")
     ax.axhline(0, color="gray", ls=":", lw=1)
     ax.set_xlabel("Alginate stock concentration [% w/v]")
     ax.set_ylabel("Parameter value [kPa]")
@@ -505,10 +513,10 @@ def fig7_dip_amplitudes(summary, q):
     ax.plot(c, np.maximum(bbar - B2 * (c - cbar), 0.0), "k-", lw=2, label="slope $-b_2$ (theory)")
     for i, (calg, B) in enumerate(pts):
         ax.scatter([calg], [B], s=110, color=COLORS[i], zorder=5, label=f"{calg:g} % alg")
-    ax.axvline(C_SAT, color="red", ls="--", lw=1.5, label=f"C_sat={C_SAT:.1f}% (computed)")
+    ax.axvline(C_SAT, color="red", ls="--", lw=1.5, label=rf"$C_{{sat}}$ = {C_SAT:.2f} % (computed)")
     ax.axhline(0, color="gray", ls=":", lw=1)
     ax.set_xlabel("Alginate stock concentration [% w/v]")
-    ax.set_ylabel("B [kPa]")
+    ax.set_ylabel("$B$ [kPa]")
     ax.legend(fontsize=11)
     _finish(fig, "Fig7_dip_amplitude")
 
@@ -519,9 +527,9 @@ def fig8_peak_positions(q):
     for ci in c:
         A1, A2, B = amplitudes(ci, REF_CTONCF, q)
         xa_i = x_ana(A1, A2)
-        xn.append(x_num(A1, A2, B) / SCALE)
-        xa.append(xa_i / SCALE)
-        xp.append((xa_i + k_coefficient(A1, A2) * B) / SCALE)
+        xn.append(f_coord(x_num(A1, A2, B), REF_CTONCF))
+        xa.append(f_coord(xa_i, REF_CTONCF))
+        xp.append(f_coord(xa_i + k_coefficient(A1, A2) * B, REF_CTONCF))
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(7, 4.6), sharex=True, gridspec_kw={"height_ratios": [3, 1.3]})
     for ax in (ax1, ax2):
         _style_axes(ax)
@@ -531,8 +539,8 @@ def fig8_peak_positions(q):
     ax1.plot(c, xa, ":", lw=2.5, color="#d62728", label="$X_{ANA}$")
     for ax in (ax1, ax2):
         ax.axvline(C_SAT, color="gray", ls="--", lw=1, alpha=0.7)
-    ax1.plot([], [], color="gray", ls="--", lw=1, label=f"C_sat={C_SAT:.1f}%")
-    ax1.set_ylabel("TONCF fraction")
+    ax1.plot([], [], color="gray", ls="--", lw=1, label=rf"$C_{{sat}}$ = {C_SAT:.2f} %")
+    ax1.set_ylabel("Mixing fraction $f$")
     ax1.legend()
     ax2.plot(c, np.array(xn) - np.array(xp), color="#ff7f0e", lw=2)
     ax2.axhline(0, color="gray", ls="--", lw=0.8)
@@ -583,7 +591,7 @@ def fig10_validation(summary, q):
         ax.errorbar(s.f, s.E_kPa, yerr=s.SD_kPa, color=COLORS[i], marker="o", ms=5, ls="none", **EB)
         ax.plot(F_PLOT, predict(F_PLOT, calg, ctoncf, q), color=COLORS[i], lw=2.2, label=f"{calg:g} % alg. stock")
     ax.set_xlabel("TONCF mixing fraction $f$")
-    ax.set_ylabel("E [kPa]")
+    ax.set_ylabel("Young's modulus $E$ [kPa]")
     ax.set_ylim(bottom=-5)
     _finish(fig, "Fig10_model_validation", rect=_legend_below(fig, ax, ncol=3))
 
@@ -599,7 +607,7 @@ def fig11_stock_prediction(summary, q):
     ax.scatter(s.f, predict(s.f.values, calg, ctoncf, q), color="black", marker="D", s=120, zorder=6,
                label="predicted")
     ax.set_xlabel("TONCF mixing fraction $f$")
-    ax.set_ylabel("E [kPa]")
+    ax.set_ylabel("Young's modulus $E$ [kPa]")
     ax.legend(loc="upper left")
     _finish(fig, "Fig11_stock_prediction")
 
@@ -640,8 +648,9 @@ def main(path=None):
 
     A1, A2, B = amplitudes(REF_CALG, REF_CTONCF, q)
     xa, xn, k = x_ana(A1, A2), x_num(A1, A2, B), k_coefficient(A1, A2)
-    print(f"\nPeak positions (7.5 % series): X_ANA = {xa / SCALE:.4f}   X_ANA + kB = {(xa + k * B) / SCALE:.4f}"
-          f"   X_NUM = {xn / SCALE:.4f}  (TONCF fraction)")
+    fa, fp, fn = (f_coord(v, REF_CTONCF) for v in (xa, xa + k * B, xn))
+    print(f"\nPeak positions (7.5 % series): X_ANA = {fa:.4f}   X_ANA + kB = {fp:.4f}   X_NUM = {fn:.4f}"
+          f"  (TONCF mixing fraction)")
 
     article_figures(summary, q)
 
