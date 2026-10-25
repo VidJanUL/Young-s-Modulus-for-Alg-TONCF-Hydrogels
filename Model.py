@@ -17,7 +17,6 @@ REF_CALG = 7.5        # alginate stock concentration of the reference series (% 
 REF_CTONCF = 3.0      # TONCF stock concentration of the alginate series (% w/v)
 CA = 2.0              # CaCl2 concentration of the cross-linking bath for the modelled series (% w/v, anhydrous CaCl2)
 C_REF = 3.0           # TONCF stock concentration up to which the fibres contribute independently (% w/v)
-TRAIN = [5.0, 7.5, 10.0]          # predefined training series (alginate stock, % w/v)
 
 R_GAS = 8.314         # J / (mol K)
 T = 293               # K
@@ -52,6 +51,7 @@ SIG_WIDTH = 0.08                          # Eq. (19)
 PSI = PSI_A = None
 C_SAT = 20.0          # iteration seed only
 FIT = {}
+TRAIN = [5.0, 7.5, 10.0]          # predefined training series (alginate stock, % w/v)
 
 def _norm(name):
     return re.sub(r"\s+", "", str(name)).lower()
